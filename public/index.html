@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gemini Interactions Playground</title>
+<style>
+:root{--bg:#080b14;--panel:#101522;--panel2:#171d2d;--line:#283149;--text:#edf2ff;--muted:#8d98b5;--accent:#7c8cff;--danger:#ff7373;--user:#27335b;--assistant:#141b2d}
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+.logo{font-weight:750;font-size:17px;background:linear-gradient(90deg,#8b9cff,#bd7cff);color:transparent;background-clip:text}
+.spacer{flex:1}label{font-size:12px;color:var(--muted)}select,input,textarea,button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--line);border-radius:9px;outline:none}select,input,button{padding:9px 11px}select:focus,textarea:focus,input:focus{border-color:var(--accent)}
+button{cursor:pointer}button.primary{border:0;background:linear-gradient(90deg,#7186ff,#9b6cff);font-weight:700;padding:10px 17px}.icon{padding:8px 10px}
+nav{display:flex;gap:4px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}nav button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);padding:12px 15px}nav button.active{color:var(--text);border-bottom-color:var(--accent)}
+main{flex:1;min-height:0;display:flex}.view{display:none;flex:1;min-height:0}.view.active{display:flex}
+#chatView{flex-direction:column}.messages{flex:1;overflow:auto;padding:22px;display:flex;flex-direction:column;gap:14px}.msg{max-width:850px;padding:13px 16px;border-radius:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.msg.user{align-self:flex-end;background:var(--user)}.msg.assistant{align-self:flex-start;background:var(--assistant);border:1px solid #202a43}.role{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px}
+.composer{border-top:1px solid var(--line);background:var(--panel);padding:14px 18px;display:flex;gap:10px;align-items:flex-end}.composer textarea{flex:1;resize:none;min-height:44px;max-height:180px;padding:11px 13px}.status{font-size:11px;color:var(--muted);padding:5px 18px 10px}.error{color:var(--danger)}
+#visionView{overflow:auto;justify-content:center}.card{width:min(900px,100%);padding:22px;display:flex;flex-direction:column;gap:14px}.drop{min-height:230px;border:2px dashed var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);padding:18px;cursor:pointer}.drop:hover{border-color:var(--accent)}.drop img{max-width:100%;max-height:360px;border-radius:10px}.card textarea{resize:vertical;padding:12px}.output{min-height:110px;background:var(--panel2);border-radius:12px;padding:15px;white-space:pre-wrap;line-height:1.6}
+@media(max-width:650px){header{padding:12px}.spacer{display:none}.messages{padding:14px}.composer{padding:10px}.card{padding:14px}.msg{max-width:94%}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">✦ Gemini Interactions Playground</div>
+  <div class="spacer"></div>
+  <label for="model">MODEL</label>
+  <select id="model"><option value="gemini-3.6-flash">gemini-3.6-flash</option></select>
+  <button class="icon" id="refreshModels" title="Refresh models">↻</button>
+</header>
+<nav>
+  <button class="tab active" data-view="chatView">Chat</button>
+  <button class="tab" data-view="visionView">Vision</button>
+  <button id="clear" style="margin-left:auto;color:var(--danger)">Clear</button>
+</nav>
+<main>
+<section id="chatView" class="view active">
+  <div id="messages" class="messages">
+    <div class="msg assistant"><div class="role">assistant</div>Ready. This playground uses the Gemini Interactions API.</div>
+  </div>
+  <form id="form" class="composer">
+    <textarea id="prompt" rows="1" placeholder="Ask anything…"></textarea>
+    <button id="send" class="primary">Send</button>
+  </form>
+  <div id="status" class="status">Ready.</div>
+</section>
+<section id="visionView" class="view">
+  <div class="card">
+    <div id="drop" class="drop">
+      <div id="dropLabel">Tap to choose an image, or drop one here<br><small>Maximum 3 MB</small></div>
+      <input id="file" type="file" accept="image/*" hidden>
+    </div>
+    <textarea id="visionPrompt" rows="3" placeholder="Ask about the image…">Describe this image in detail.</textarea>
+    <button id="analyze" class="primary" style="align-self:flex-start">Analyze image</button>
+    <div id="visionOutput" class="output">Output will appear here.</div>
+    <div id="visionStatus" class="status">Ready.</div>
+  </div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const model=$("model"),messages=$("messages"),prompt=$("prompt"),send=$("send"),status=$("status");
+const history=[]; let imageData=null,mimeType=null;
+
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  if(!b.dataset.view)return;
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");$(b.dataset.view).classList.add("active");
+});
+$("clear").onclick=()=>{if(confirm("Clear conversation?")){history.length=0;messages.innerHTML="";add("assistant","Conversation cleared.");}};
+function add(role,text=""){const d=document.createElement("div");d.className="msg "+role;d.innerHTML='<div class="role">'+role+'</div><div></div>';d.lastChild.textContent=text;messages.appendChild(d);messages.scrollTop=messages.scrollHeight;return d.lastChild}
+prompt.oninput=()=>{prompt.style.height="auto";prompt.style.height=Math.min(prompt.scrollHeight,180)+"px"};
+prompt.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("form").requestSubmit()}};
+
+$("form").onsubmit=async e=>{
+ e.preventDefault();const text=prompt.value.trim();if(!text||send.disabled)return;
+ add("user",text);prompt.value="";prompt.style.height="auto";send.disabled=true;status.textContent="Streaming…";status.className="status";
+ const out=add("assistant","");
+ try{
+  const r=await fetch("/api/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:text,model:model.value,history})});
+  if(!r.ok||!r.body)throw new Error(await r.text()||("HTTP "+r.status));
+  const reader=r.body.getReader(),decoder=new TextDecoder();let full="";
+  while(true){const {done,value}=await reader.read();if(done)break;full+=decoder.decode(value,{stream:true});out.textContent=full;messages.scrollTop=messages.scrollHeight}
+  if(full.startsWith("[ERROR]"))throw new Error(full);
+  history.push({role:"user",text},{role:"assistant",text:full});status.textContent="Done.";
+ }catch(err){out.textContent="⚠️ "+err.message;status.textContent="Error";status.className="status error"}finally{send.disabled=false}
+};
+
+$("drop").onclick=()=>$("file").click();
+$("drop").ondragover=e=>{e.preventDefault();$("drop").style.borderColor="var(--accent)"};
+$("drop").ondragleave=()=>{$("drop").style.borderColor="var(--line)"};
+$("drop").ondrop=e=>{e.preventDefault();$("drop").style.borderColor="var(--line");if(e.dataTransfer.files[0])loadImage(e.dataTransfer.files[0])};
+$("file").onchange=()=>{if($("file").files[0])loadImage($("file").files[0])};
+function loadImage(file){
+ if(file.size>3*1024*1024){alert("Image too large. Maximum 3 MB.");return}
+ mimeType=file.type||"image/jpeg";const reader=new FileReader();
+ reader.onload=()=>{imageData=reader.result;$("dropLabel").innerHTML="";const img=document.createElement("img");img.src=imageData;$("drop").replaceChildren(img)};
+ reader.readAsDataURL(file);
+}
+$("analyze").onclick=async()=>{
+ if(!imageData){$("visionStatus").textContent="Select an image first.";return}
+ const b=$("analyze");b.disabled=true;$("visionStatus").textContent="Analyzing…";$("visionOutput").textContent="";
+ try{
+  const r=await fetch("/api/vision",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:$("visionPrompt").value,model:model.value,imageBase64:imageData,mimeType})});
+  const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||("HTTP "+r.status));$("visionOutput").textContent=d.text||"(No text returned)";$("visionStatus").textContent="Done.";
+ }catch(e){$("visionOutput").textContent="⚠️ "+e.message;$("visionStatus").textContent="Error";$("visionStatus").className="status error"}finally{b.disabled=false}
+};
+
+async function loadModels(){
+ try{
+  const r=await fetch("/api/models");const d=await r.json();if(!d.success)return;
+  const old=model.value;model.innerHTML="";
+  for(const m of d.models){const o=document.createElement("option");o.value=m.id;o.textContent=m.id;model.appendChild(o)}
+  model.value=[...model.options].some(o=>o.value===old)?old:(d.defaultModel||model.options[0]?.value||"gemini-3.6-flash");
+ }catch{}
+}
+$("refreshModels").onclick=loadModels;
+loadModels();
+</script>
+</body>
+</html>
