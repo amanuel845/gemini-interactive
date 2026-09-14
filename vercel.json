@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "functions": {
+    "api/chat.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/stream.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/vision.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/models.js": {
+      "maxDuration": 30,
+      "memory": 512
+    }
+  }
+}
